@@ -5,6 +5,7 @@ function connect() {
     
     ws.onopen = function() {
         console.log("Connected");
+        $("#status").html("Connected") 
         ws.send(JSON.stringify({"type": "run_id", 
                                 "data": "debonair-store"}));
     };
@@ -19,6 +20,7 @@ function connect() {
     };
 
     ws.onclose = function() {
+        $("#status").html("Connection Closed") 
         console.log("Connection closed. Reconnecting...");
         setTimeout(connect, 5000);  // Try to reconnect every 5 seconds.
     };
