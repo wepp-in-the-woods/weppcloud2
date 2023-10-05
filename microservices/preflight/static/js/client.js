@@ -1,7 +1,7 @@
 var ws;
 
 function connect() {
-    ws = new WebSocket("ws://localhost:9001/rlew-broadband-hydrologist");
+    ws = new WebSocket("wss://dev.wepp.cloud/weppcloud-microservices/preflight/rlew-broadband-hydrologist");
     
     ws.onopen = function() {
         console.log("Connected");
