@@ -1,11 +1,12 @@
 var ws;
 
 function connect() {
-    ws = new WebSocket("ws://your_server_address:8888/websocket");
+    ws = new WebSocket("ws://localhost:9001/websocket");
     
     ws.onopen = function() {
         console.log("Connected");
-        ws.send(JSON.stringify({"type": "run_id", "data": "your_run_id"}));
+        ws.send(JSON.stringify({"type": "run_id", 
+                                "data": "debonair-store"}));
     };
 
     ws.onmessage = function(event) {
