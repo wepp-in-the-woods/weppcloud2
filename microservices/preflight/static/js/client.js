@@ -1,13 +1,12 @@
 var ws;
 
 function connect() {
-    ws = new WebSocket("ws://localhost:9001/websocket");
+    ws = new WebSocket("ws://localhost:9001/rlew-broadband-hydrologist");
     
     ws.onopen = function() {
         console.log("Connected");
         $("#status").html("Connected") 
-        ws.send(JSON.stringify({"type": "run_id", 
-                                "data": "debonair-store"}));
+        ws.send(JSON.stringify({"type": "init"}));
     };
 
     ws.onmessage = function(event) {
@@ -15,6 +14,9 @@ function connect() {
         if(payload.type === "ping") {
             console.log("Received ping from server");
             ws.send(JSON.stringify({"type": "pong"}));
+        }
+        else if (payload.type === "preflight") {
+            console.log(payload.hashmap);
         }
         // TODO: Handle data from server.
     };
