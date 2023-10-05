@@ -40,7 +40,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
     
     def open(self, run_id):
         self.clients.add(self)
-        self.run_id = run_id
+        self.run_id = os.path.split(run_id)[-1]
         self.last_pong = datetime.datetime.utcnow()
     
     def on_message(self, message):
@@ -83,7 +83,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
 
 def preflight(prep: dict) -> dict:
     """
-    [Function description]
+    Runs preflight check for running wepp
 
     Parameters:
     - prep (dict): redis hashmap of preflight parameters
@@ -131,9 +131,11 @@ async def on_hset(channel: aioredis.client.PubSub, redis, clients):
                     hashmap = await redis.hgetall(run_id)
                     hashmap = {k.decode('utf-8'): v.decode('utf-8') for k, v in hashmap.items()}
                     preflight_d = preflight(hashmap)
+                    print(preflight_d)
                     for client in clients:
-                        # Ensure client connection is alive before sending message
-                        if client.ws_connection and client.ws_connection.stream.socket and client.run_id == run_id:
+                        print(client.run_id == run_id, client.run_id, run_id)
+                        if client.run_id == run_id:
+                            print(f'send to {run_id}')
                             await client.write_message(
                                 json.dumps({"type": "preflight", "checklist": preflight_d}))
                 await asyncio.sleep(0.01)
