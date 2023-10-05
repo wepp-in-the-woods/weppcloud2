@@ -14,6 +14,23 @@ CLIENT_CHECK_INTERVAL = 5000  # in milliseconds
 REDIS_KEY_PATTERN = '__keyspace@0__:*'
 
 
+def _try_int_parse(x):
+    try:
+        return int(x)
+    except (ValueError, TypeError):
+        return None
+
+def _safe_gt(a, b):
+    a = _try_int_parse(a)
+    b = _try_int_parse(b)
+
+    if a is None or b is None:
+        return False
+
+    return a > b
+
+
+
 class WebSocketHandler(tornado.websocket.WebSocketHandler):
     clients = set()
 
@@ -64,6 +81,45 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         future = asyncio.ensure_future(on_hset(pubsub, redis, cls.clients))
         await future
 
+def preflight(prep: dict) -> dict:
+    """
+    [Function description]
+
+    Parameters:
+    - prep (dict): redis hashmap of preflight parameters
+
+    Returns:
+    - dict: preflight checklist
+    """
+
+    d = {}
+
+    d['sbs_map'] = 'has_sbs' in prep
+    d['channels'] = 'build_channels' in prep
+    d['outlet'] = _safe_gt(prep.get('set_outlet'), prep.get('build_channels'))
+    d['subcatchments'] = _safe_gt(prep.get('abstract_watershed'), prep.get('build_channels'))
+    d['landuse'] = _safe_gt(prep.get('build_landuse'), prep.get('abstract_watershed'))
+    d['soils'] = _safe_gt(prep.get('build_soils'), prep.get('abstract_watershed')) and \
+                 _safe_gt(prep.get('build_soils'), prep.get('build_landuse'))
+    d['climate'] = _safe_gt(prep.get('build_climate'), prep.get('abstract_watershed'))
+    d['wepp'] = _safe_gt(prep.get('run_wepp'), prep.get('build_landuse')) and \
+                _safe_gt(prep.get('run_wepp'), prep.get('build_soils')) and \
+                _safe_gt(prep.get('run_wepp'), prep.get('build_climate'))
+    d['observed'] = _safe_gt(prep.get('run_observed'), prep.get('build_landuse')) and \
+                    _safe_gt(prep.get('run_observed'), prep.get('build_soils')) and \
+                    _safe_gt(prep.get('run_observed'), prep.get('build_climate')) and \
+                    _safe_gt(prep.get('run_observed'), prep.get('run_wepp'))
+    d['debris'] = _safe_gt(prep.get('run_debris'), prep.get('build_landuse')) and \
+                  _safe_gt(prep.get('run_debris'), prep.get('build_soils')) and \
+                  _safe_gt(prep.get('run_debris'), prep.get('build_climate')) and \
+                  _safe_gt(prep.get('run_debris'), prep.get('run_wepp'))
+    d['watar'] = _safe_gt(prep.get('run_watar'), prep.get('build_landuse')) and \
+                 _safe_gt(prep.get('run_watar'), prep.get('build_soils')) and \
+                 _safe_gt(prep.get('run_watar'), prep.get('build_climate')) and \
+                 _safe_gt(prep.get('run_watar'), prep.get('run_wepp'))
+
+    return d
+
 
 async def on_hset(channel: aioredis.client.PubSub, redis, clients):
     while True:
@@ -74,12 +130,12 @@ async def on_hset(channel: aioredis.client.PubSub, redis, clients):
                     run_id = message['channel'].split(b':')[-1].decode('utf-8')
                     hashmap = await redis.hgetall(run_id)
                     hashmap = {k.decode('utf-8'): v.decode('utf-8') for k, v in hashmap.items()}
-
+                    preflight_d = preflight(hashmap)
                     for client in clients:
                         # Ensure client connection is alive before sending message
                         if client.ws_connection and client.ws_connection.stream.socket and client.run_id == run_id:
                             await client.write_message(
-                                json.dumps({"type": "preflight", "hashmap": hashmap}))
+                                json.dumps({"type": "preflight", "checklist": preflight_d}))
                 await asyncio.sleep(0.01)
         except asyncio.TimeoutError:
             # Consider logging timeout error for debugging purposes
