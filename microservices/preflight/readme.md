@@ -107,6 +107,21 @@ sudo journalctl -u preflight.service
 
 This command displays the logs for the `preflight` service, which can be useful for debugging and monitoring the service status.
 
+
+## Apache Conf
+```
+    <Location /webappcloud-microservices/preflight/>
+        # Proxying to Tornado
+        ProxyPass ws://localhost:9001/
+        ProxyPassReverse ws://localhost:9001/
+        
+        # WebSocket Upgrade
+        RewriteEngine on
+        RewriteCond %{HTTP:Upgrade} =websocket [NC]
+        RewriteRule /(.*) ws://localhost:9001/$1 [P,L]
+    </Location>
+```
+
 ### Additional Notes
 
 Ensure that the server script and all related files have the appropriate permissions and ownership for the user specified in the service file (e.g., `www-data`). The service should be able to read, execute, and write (if necessary) to all relevant files and directories.
