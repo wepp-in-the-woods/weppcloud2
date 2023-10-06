@@ -45,7 +45,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler, HeartbeatMixin):
         return True
 
     async def open(self, run_id, channel):
-        await super().on_open()
+        await super().open()
 
         self.run_id = run_id
         self.channel = channel
@@ -70,7 +70,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler, HeartbeatMixin):
         channel, = await self.redis.subscribe(self.channel)
         try:
             async for msg in channel.iter(encoding='utf-8'):
-                await self.write_message(json.dumps({"type": "status_update", "data": msg}))
+                await self.write_message(json.dumps({"type": "status", "data": msg}))
         except tornado.websocket.WebSocketClosedError:
             pass
         finally:
