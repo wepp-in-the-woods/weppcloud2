@@ -126,6 +126,13 @@ This command displays the logs for the `preflight` service, which can be useful 
 
 
 ## Apache Conf
+
+```
+sudo a2enmod proxy
+sudo a2enmod proxy_http
+sudo a2enmod proxy_wstunnel
+```
+
 ```
     <Location /webappcloud-microservices/preflight/>
         # Proxying to Tornado
