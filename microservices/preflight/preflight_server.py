@@ -1,7 +1,6 @@
 import os
 import json
 import asyncio
-import datetime
 import async_timeout
 import tornado.ioloop
 import tornado.websocket
@@ -41,7 +40,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
     async def open(self, run_id):
         self.clients.add(self)
         self.run_id = os.path.split(run_id)[-1]
-        self.last_pong = datetime.datetime.utcnow()
+        self.last_pong = tornado.ioloop.IOLoop.current().time()
 
         # Fetch the preflight checklist for the given run_id from Redis
         redis = await aioredis.from_url(REDIS_URL, db=0)
@@ -52,14 +51,18 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         # Send the checklist to the client
         await self.write_message(json.dumps({"type": "preflight", "checklist": preflight_d}))
     
-    def on_message(self, message):
-        payload = json.loads(message)
-        # Consider adding validation for received payload
-        if payload.get("type") == "pong":
-            self.last_pong = datetime.datetime.utcnow()
+    async def on_message(self, message):
+        try:
+            payload = json.loads(message)
+            if payload.get("type") == "pong":
+                self.last_pong = tornado.ioloop.IOLoop.current().time()
+        except json.JSONDecodeError:
+            print("Error decoding message")
     
     def on_close(self):
-        self.clients.remove(self)
+        # Remove the client from the clients set
+        if self in self.clients:
+            self.clients.remove(self)
     
     def ping_client(self):
         # Ensure client connection is alive before sending message
@@ -76,7 +79,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
     @classmethod
     def check_clients(cls):
         # Consider logging client checks for debugging purposes
-        now = datetime.datetime.utcnow()
+        now = tornado.ioloop.IOLoop.current().time()
         for client in cls.clients:
             if (now - client.last_pong).total_seconds() > 35:
                 print("Closing stale connection")

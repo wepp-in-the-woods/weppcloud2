@@ -4,7 +4,6 @@ import aioredis
 import asyncio
 import async_timeout
 import json
-import datetime
 
 # Constants
 REDIS_URL = 'redis://localhost'
@@ -13,6 +12,16 @@ DB = 2
 
 class WebSocketHandler(tornado.websocket.WebSocketHandler):
     clients = set()
+
+    async def open(self, run_id, channel):
+        self.run_id = run_id
+        self.channel = channel
+        self.last_pong = tornado.ioloop.IOLoop.current().time()
+        await self.connect_to_redis()
+        self.clients.add(self)
+        asyncio.ensure_future(self.listen_to_redis())
+
+        print(run_id, channel)
 
     async def ping_client(self):
         try:
@@ -28,7 +37,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
     @classmethod
     def check_clients(cls):
         # Consider logging client checks for debugging purposes
-        now = datetime.datetime.utcnow()
+        now = tornado.ioloop.IOLoop.current().time()
         for client in cls.clients:
             if (now - client.last_pong).total_seconds() > 35:
                 print("Closing stale connection")
@@ -36,18 +45,6 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
 
     def check_origin(self, origin):
         return True
-
-    async def open(self, run_id, channel):
-        self.run_id = run_id
-        self.channel = channel
-        self.last_pong = tornado.ioloop.IOLoop.current().time()  # track the last pong time
-        await self.connect_to_redis()
-        self.clients.add(self)
-        asyncio.ensure_future(self.listen_to_redis())
-
-        self.last_pong = datetime.datetime.utcnow()
-
-        print(run_id, channel)
 
     async def connect_to_redis(self):
         backoff = 1
@@ -82,12 +79,25 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         await future
 
     async def on_message(self, message):
-        payload = json.loads(message)
-        if payload.get("type") == "pong":
-            self.last_pong = datetime.datetime.utcnow()
+        try:
+            payload = json.loads(message)
+            if payload.get("type") == "pong":
+                self.last_pong = tornado.ioloop.IOLoop.current().time()
+        except json.JSONDecodeError:
+            print("Error decoding message")
+            
+    async def on_close(self):
+        print(f"Connection closed for run_id: {self.run_id}, channel: {self.channel}")
+        
+        # Remove the client from the clients set
+        if self in self.clients:
+            self.clients.remove(self)
 
-    def on_close(self):
-        pass  # cleanup is handled in listen_to_redis finally block
+        # Unsubscribe from the channel and close the Redis connection
+        if hasattr(self, 'pubsub'):
+            await self.pubsub.unsubscribe(f"{self.run_id}:{self.channel}")
+            self.redis.close()
+            await self.redis.wait_closed()
 
 
 async def main():
