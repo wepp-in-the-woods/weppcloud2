@@ -25,6 +25,7 @@ Ensure that the following line is present and uncommented in your `redis.conf` f
 
 ```conf
 notify-keyspace-events Ksh
+```
 
 ### Notes for Future Development
 
