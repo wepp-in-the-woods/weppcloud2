@@ -43,6 +43,22 @@ The `systemd` service file for the preflight service is located at:
 /etc/systemd/system/preflight.service
 ```
 
+#### Contents
+```
+Description=Preflight Tornado WebSocket Server
+After=network.target
+ 
+[Service]
+ExecStart=/usr/bin/python3 /workdir/weppcloud2/microservices/preflight/preflight_server.py
+WorkingDirectory=/workdir/weppcloud2/microservices/preflight
+User=www-data
+Group=webgroup
+Restart=always
+ 
+[Install]
+WantedBy=multi-user.target
+```
+
 This file contains the configuration for starting and managing the service.
 
 ### Server File Location
