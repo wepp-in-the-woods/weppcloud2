@@ -38,10 +38,19 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         # Consider adding more checks for origin validation if needed
         return True
     
-    def open(self, run_id):
+    async def open(self, run_id):
         self.clients.add(self)
         self.run_id = os.path.split(run_id)[-1]
         self.last_pong = datetime.datetime.utcnow()
+
+        # Fetch the preflight checklist for the given run_id from Redis
+        redis = await aioredis.from_url(REDIS_URL, db=0)
+        hashmap = await redis.hgetall(self.run_id)
+        hashmap = {k.decode('utf-8'): v.decode('utf-8') for k, v in hashmap.items()}
+        preflight_d = preflight(hashmap)
+        
+        # Send the checklist to the client
+        await self.write_message(json.dumps({"type": "preflight", "checklist": preflight_d}))
     
     def on_message(self, message):
         payload = json.loads(message)
