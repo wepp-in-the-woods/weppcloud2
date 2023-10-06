@@ -94,29 +94,29 @@ def preflight(prep: dict) -> dict:
 
     d = {}
 
-    d['sbs_map'] = 'has_sbs' in prep
-    d['channels'] = 'build_channels' in prep
-    d['outlet'] = _safe_gt(prep.get('set_outlet'), prep.get('build_channels'))
-    d['subcatchments'] = _safe_gt(prep.get('abstract_watershed'), prep.get('build_channels'))
-    d['landuse'] = _safe_gt(prep.get('build_landuse'), prep.get('abstract_watershed'))
-    d['soils'] = _safe_gt(prep.get('build_soils'), prep.get('abstract_watershed')) and \
-                 _safe_gt(prep.get('build_soils'), prep.get('build_landuse'))
-    d['climate'] = _safe_gt(prep.get('build_climate'), prep.get('abstract_watershed'))
-    d['wepp'] = _safe_gt(prep.get('run_wepp'), prep.get('build_landuse')) and \
-                _safe_gt(prep.get('run_wepp'), prep.get('build_soils')) and \
-                _safe_gt(prep.get('run_wepp'), prep.get('build_climate'))
-    d['observed'] = _safe_gt(prep.get('run_observed'), prep.get('build_landuse')) and \
-                    _safe_gt(prep.get('run_observed'), prep.get('build_soils')) and \
-                    _safe_gt(prep.get('run_observed'), prep.get('build_climate')) and \
-                    _safe_gt(prep.get('run_observed'), prep.get('run_wepp'))
-    d['debris'] = _safe_gt(prep.get('run_debris'), prep.get('build_landuse')) and \
-                  _safe_gt(prep.get('run_debris'), prep.get('build_soils')) and \
-                  _safe_gt(prep.get('run_debris'), prep.get('build_climate')) and \
-                  _safe_gt(prep.get('run_debris'), prep.get('run_wepp'))
-    d['watar'] = _safe_gt(prep.get('run_watar'), prep.get('build_landuse')) and \
-                 _safe_gt(prep.get('run_watar'), prep.get('build_soils')) and \
-                 _safe_gt(prep.get('run_watar'), prep.get('build_climate')) and \
-                 _safe_gt(prep.get('run_watar'), prep.get('run_wepp'))
+    d['sbs_map'] = 'attrs:has_sbs' in prep
+    d['channels'] = 'timestamps:build_channels' in prep
+    d['outlet'] = _safe_gt(prep.get('timestamps:set_outlet'), prep.get('timestamps:build_channels'))
+    d['subcatchments'] = _safe_gt(prep.get('timestamps:abstract_watershed'), prep.get('timestamps:build_channels'))
+    d['landuse'] = _safe_gt(prep.get('timestamps:build_landuse'), prep.get('timestamps:abstract_watershed'))
+    d['soils'] = _safe_gt(prep.get('timestamps:build_soils'), prep.get('timestamps:abstract_watershed')) and \
+                 _safe_gt(prep.get('timestamps:build_soils'), prep.get('timestamps:build_landuse'))
+    d['climate'] = _safe_gt(prep.get('timestamps:build_climate'), prep.get('timestamps:abstract_watershed'))
+    d['wepp'] = _safe_gt(prep.get('timestamps:run_wepp'), prep.get('timestamps:build_landuse')) and \
+                _safe_gt(prep.get('timestamps:run_wepp'), prep.get('timestamps:build_soils')) and \
+                _safe_gt(prep.get('timestamps:run_wepp'), prep.get('timestamps:build_climate'))
+    d['observed'] = _safe_gt(prep.get('timestamps:run_observed'), prep.get('timestamps:build_landuse')) and \
+                    _safe_gt(prep.get('timestamps:run_observed'), prep.get('timestamps:build_soils')) and \
+                    _safe_gt(prep.get('timestamps:run_observed'), prep.get('timestamps:build_climate')) and \
+                    _safe_gt(prep.get('timestamps:run_observed'), prep.get('timestamps:run_wepp'))
+    d['debris'] = _safe_gt(prep.get('timestamps:run_debris'), prep.get('timestamps:build_landuse')) and \
+                  _safe_gt(prep.get('timestamps:run_debris'), prep.get('timestamps:build_soils')) and \
+                  _safe_gt(prep.get('timestamps:run_debris'), prep.get('timestamps:build_climate')) and \
+                  _safe_gt(prep.get('timestamps:run_debris'), prep.get('timestamps:run_wepp'))
+    d['watar'] = _safe_gt(prep.get('timestamps:run_watar'), prep.get('timestamps:build_landuse')) and \
+                 _safe_gt(prep.get('timestamps:run_watar'), prep.get('timestamps:build_soils')) and \
+                 _safe_gt(prep.get('timestamps:run_watar'), prep.get('timestamps:build_climate')) and \
+                 _safe_gt(prep.get('timestamps:run_watar'), prep.get('timestamps:run_wepp'))
 
     return d
 
