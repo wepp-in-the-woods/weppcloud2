@@ -39,7 +39,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         # Consider logging client checks for debugging purposes
         now = tornado.ioloop.IOLoop.current().time()
         for client in cls.clients:
-            if (now - client.last_pong).total_seconds() > 35:
+            if now - client.last_pong > 35:
                 print("Closing stale connection")
                 client.close()
 
@@ -85,7 +85,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
                 self.last_pong = tornado.ioloop.IOLoop.current().time()
         except json.JSONDecodeError:
             print("Error decoding message")
-            
+
     async def on_close(self):
         print(f"Connection closed for run_id: {self.run_id}, channel: {self.channel}")
         
