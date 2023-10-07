@@ -59,18 +59,17 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
                 backoff = min(backoff * 2, max_backoff)
 
     async def proxy_message(self, channel: aioredis.client.PubSub):
-        while True:
-            try:
-                async with async_timeout.timeout(1):
-                    message = await channel.get_message(ignore_subscribe_messages=True)
-                    if message is not None:
-                        print(f"(Reader) Message Received: {message}")
-                        data = message['data'].decode('utf-8')
-                        self.write_message(
-                            json.dumps({"type": "status", "data": data}))
-                    await asyncio.sleep(0.001)
-            except asyncio.TimeoutError:
-                pass
+        try:
+            async with async_timeout.timeout(1):
+                message = await channel.get_message(ignore_subscribe_messages=True)
+                if message is not None:
+                    print(f"(Reader) Message Received: {message}")
+                    data = message['data'].decode('utf-8')
+                    self.write_message(
+                        json.dumps({"type": "status", "data": data}))
+                await asyncio.sleep(0.001)
+        except asyncio.TimeoutError:
+            pass
 
     async def listen_to_redis(self):
         self.pubsub = self.redis.pubsub()
