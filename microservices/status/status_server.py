@@ -80,7 +80,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         if hasattr(self, 'pubsub'):
             asyncio.ensure_future(self.unsubscribe_to_redis())
             
- def ping_client(self):
+    def ping_client(self):
         # Ensure client connection is alive before sending message
         if not self.ws_connection or not self.ws_connection.stream.socket:
             return 0
