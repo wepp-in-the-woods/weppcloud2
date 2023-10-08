@@ -34,13 +34,13 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         print(f'run_id = {self.run_id}, channel = {self.channel}')
 
         await self.subscribe_to_redis()
-    
+        await self.proxy_message()
 
-    async def proxy_message(self, channel: aioredis.client.PubSub):
+    async def proxy_message(self):
         while True:
             try:
                 async with async_timeout.timeout(1):
-                    message = await channel.get_message(ignore_subscribe_messages=True)
+                    message = await self.pubsub.get_message(ignore_subscribe_messages=True)
                     if message is not None:
                         print(f"(Reader) Message Received: {message}")
                         data = message['data'].decode('utf-8')
@@ -49,14 +49,15 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
                     await asyncio.sleep(0.001)
             except asyncio.TimeoutError:
                 pass
+            except Exception as e:
+                print(f"Unexpected error in proxy_message: {e}")
+                break  # or decide how you want to handle unexpected errors
 
     async def subscribe_to_redis(self):
         global shared_redis
 
         self.pubsub = shared_redis.pubsub()
         await self.pubsub.subscribe(f"{self.run_id}:{self.channel}")
-        future = asyncio.ensure_future(self.proxy_message(self.pubsub))
-        await future
 
     async def unsubscribe_to_redis(self):
         global shared_redis
@@ -78,18 +79,20 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
     
         if hasattr(self, 'pubsub'):
             asyncio.ensure_future(self.unsubscribe_to_redis())
-
-    def ping_client(self):
+            
+ def ping_client(self):
         # Ensure client connection is alive before sending message
         if not self.ws_connection or not self.ws_connection.stream.socket:
-            self.clients.remove(self)
-            return
+            return 0
         self.write_message(json.dumps({"type": "ping"}))
+        return 1
+
 
     @classmethod
-    def send_heartbeats(cls):
-        for client in cls.clients:
+    async def send_heartbeats(cls):
+        for client in list(cls.clients):
             client.ping_client()
+            await asyncio.sleep(1)
 
     @classmethod
     def check_clients(cls):
@@ -97,12 +100,21 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         now = tornado.ioloop.IOLoop.current().time()
 
         # Identify stale clients
-        stale_clients = {client for client in cls.clients if now - client.last_pong > 35}
-        
+        stale_clients = set()
+
+        for client in cls.clients:
+            if (now - client.last_pong > 35) or \
+               (not client.ws_connection) or \
+               (not client.ws_connection.stream.socket):
+                stale_clients.add(client)
+       
         # Close stale connections
         for client in stale_clients:
             print(f"Closing stale connection with {client.run_id}")
             client.close()  
+
+def send_heartbeats_callback():
+    tornado.ioloop.IOLoop.current().add_callback(WebSocketHandler.send_heartbeats)
 
 
 async def main():
@@ -113,7 +125,7 @@ async def main():
         (r"/(.*)", WebSocketHandler),
     ])
     app.listen(9002)
-    tornado.ioloop.PeriodicCallback(WebSocketHandler.send_heartbeats, HEARTBEAT_INTERVAL).start()
+    tornado.ioloop.PeriodicCallback(send_heartbeats_callback, HEARTBEAT_INTERVAL).start()
     tornado.ioloop.PeriodicCallback(WebSocketHandler.check_clients, CLIENT_CHECK_INTERVAL).start()
 
 if __name__ == "__main__":
