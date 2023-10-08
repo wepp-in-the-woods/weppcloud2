@@ -34,12 +34,13 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         print(f'run_id = {self.run_id}, channel = {self.channel}')
 
         await self.subscribe_to_redis()
-
-        # fix: this blocks on_message and the client closes
-        await self.proxy_message()
+        
+        # Create an Event to signal when the coroutine should stop
+        self.stop_event = asyncio.Event()
+        asyncio.ensure_future(self.proxy_message())
 
     async def proxy_message(self):
-        while True:
+        while not self.stop_event.is_set():  
             try:
                 async with async_timeout.timeout(1):
                     message = await self.pubsub.get_message(ignore_subscribe_messages=True)
@@ -84,6 +85,9 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
     
         if hasattr(self, 'pubsub'):
             asyncio.ensure_future(self.unsubscribe_to_redis())
+                    
+            # Set the stop event to signal to proxy_message to exit
+            self.stop_event.set()
             
     def ping_client(self):
         # Ensure client connection is alive before sending message
