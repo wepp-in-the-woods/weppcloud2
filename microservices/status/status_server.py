@@ -34,6 +34,8 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         print(f'run_id = {self.run_id}, channel = {self.channel}')
 
         await self.subscribe_to_redis()
+
+        # fix: this blocks on_message and the client closes
         await self.proxy_message()
 
     async def proxy_message(self):
@@ -59,6 +61,8 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         self.pubsub = shared_redis.pubsub()
         await self.pubsub.subscribe(f"{self.run_id}:{self.channel}")
 
+        print(f'subscribed to {self.run_id}:{self.channel}')
+
     async def unsubscribe_to_redis(self):
         global shared_redis
 
@@ -69,6 +73,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
             payload = json.loads(message)
             if payload.get("type") == "pong":
                 self.last_pong = tornado.ioloop.IOLoop.current().time()
+                print(f'last_pong = {self.last_pong}')
         except json.JSONDecodeError:
             print("Error decoding message")
     
@@ -92,7 +97,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
     async def send_heartbeats(cls):
         for client in list(cls.clients):
             client.ping_client()
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.1)
 
     @classmethod
     def check_clients(cls):
@@ -103,7 +108,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         stale_clients = set()
 
         for client in cls.clients:
-            if (now - client.last_pong > 35) or \
+            if (now - client.last_pong > 65) or \
                (not client.ws_connection) or \
                (not client.ws_connection.stream.socket):
                 stale_clients.add(client)
