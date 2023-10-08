@@ -13,6 +13,9 @@ CLIENT_CHECK_INTERVAL = 5000  # in milliseconds
 REDIS_KEY_PATTERN = '__keyspace@0__:*'
 
 
+shared_redis = None  # Global variable to hold the shared Redis connection
+
+
 def _try_int_parse(x):
     try:
         return int(x)
@@ -38,13 +41,16 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         return True
     
     async def open(self, run_id):
+        global shared_redis
+        
         self.clients.add(self)
         self.run_id = os.path.split(run_id)[-1]
         self.last_pong = tornado.ioloop.IOLoop.current().time()
 
+        print(f"run_id = {self.run_id}")
+
         # Fetch the preflight checklist for the given run_id from Redis
-        redis = await aioredis.from_url(REDIS_URL, db=0)
-        hashmap = await redis.hgetall(self.run_id)
+        hashmap = await shared_redis.hgetall(self.run_id)
         hashmap = {k.decode('utf-8'): v.decode('utf-8') for k, v in hashmap.items()}
         preflight_d = preflight(hashmap)
         
@@ -59,7 +65,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         except json.JSONDecodeError:
             print("Error decoding message")
     
-    def on_close(self):
+    def close(self):
         # Remove the client from the clients set
         if self in self.clients:
             self.clients.remove(self)
@@ -67,30 +73,42 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
     def ping_client(self):
         # Ensure client connection is alive before sending message
         if not self.ws_connection or not self.ws_connection.stream.socket:
-            self.clients.remove(self)
-            return
+            return 0
         self.write_message(json.dumps({"type": "ping"}))
+        return 1
+
 
     @classmethod
-    def send_heartbeats(cls):
-        for client in cls.clients:
+    async def send_heartbeats(cls):
+        for client in list(cls.clients):
             client.ping_client()
+            await asyncio.sleep(1)
 
     @classmethod
     def check_clients(cls):
         # Consider logging client checks for debugging purposes
         now = tornado.ioloop.IOLoop.current().time()
+
+        # Identify stale clients
+        stale_clients = set()
+
         for client in cls.clients:
-            if (now - client.last_pong).total_seconds() > 35:
-                print("Closing stale connection")
-                client.close()
+            if (now - client.last_pong > 35) or \
+               (not client.ws_connection) or \
+               (not client.ws_connection.stream.socket):
+                stale_clients.add(client)
+       
+        # Close stale connections
+        for client in stale_clients:
+            print(f"Closing stale connection with {client.run_id}")
+            client.close()  
 
     @classmethod
     async def listen_to_redis(cls):
-        redis = await aioredis.from_url(REDIS_URL, db=0)
-        pubsub = redis.pubsub()
+        global shared_redis
+        pubsub = shared_redis.pubsub()
         await pubsub.psubscribe(REDIS_KEY_PATTERN)
-        future = asyncio.ensure_future(on_hset(pubsub, redis, cls.clients))
+        future = asyncio.ensure_future(on_hset(pubsub, shared_redis, cls.clients))
         await future
 
 def preflight(prep: dict) -> dict:
@@ -156,15 +174,22 @@ async def on_hset(channel: aioredis.client.PubSub, redis, clients):
             pass
 
 
+def send_heartbeats_callback():
+    tornado.ioloop.IOLoop.current().add_callback(WebSocketHandler.send_heartbeats)
+
 async def main():
+    global shared_redis
+    shared_redis = await aioredis.from_url(REDIS_URL, db=0)  # Create shared Redis connection
+    
     app = tornado.web.Application([
         (r"/(.*)", WebSocketHandler),
     ])
     app.listen(9001)
-    tornado.ioloop.PeriodicCallback(WebSocketHandler.send_heartbeats, HEARTBEAT_INTERVAL).start()
+    tornado.ioloop.PeriodicCallback(send_heartbeats_callback, HEARTBEAT_INTERVAL).start()
     tornado.ioloop.PeriodicCallback(WebSocketHandler.check_clients, CLIENT_CHECK_INTERVAL).start()
     await WebSocketHandler.listen_to_redis()
 
 if __name__ == "__main__":
     tornado.ioloop.IOLoop.current().run_sync(main)
+
 
