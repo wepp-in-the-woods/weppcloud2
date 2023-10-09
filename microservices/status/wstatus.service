@@ -1,0 +1,12 @@
+Description=Weppcloud2.Status Tornado WebSocket Server
+After=network.target
+ 
+[Service]
+ExecStart=/usr/bin/python3 /workdir/weppcloud2/microservices/status/status_server.py
+WorkingDirectory=/workdir/weppcloud2/microservices/status
+User=www-data
+Group=webgroup
+Restart=always
+ 
+[Install]
+WantedBy=multi-user.target
