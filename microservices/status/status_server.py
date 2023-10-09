@@ -45,7 +45,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
                 async with async_timeout.timeout(1):
                     message = await self.pubsub.get_message(ignore_subscribe_messages=True)
                     if message is not None:
-                        print(f"(Reader) Message Received: {message}")
+#                        print(f"(Reader) Message Received: {message}")
                         data = message['data'].decode('utf-8')
                         self.write_message(
                             json.dumps({"type": "status", "data": data}))
