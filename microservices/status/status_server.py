@@ -74,7 +74,6 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
             payload = json.loads(message)
             if payload.get("type") == "pong":
                 self.last_pong = tornado.ioloop.IOLoop.current().time()
-                print(f'last_pong = {self.last_pong}')
         except json.JSONDecodeError:
             print("Error decoding message")
     

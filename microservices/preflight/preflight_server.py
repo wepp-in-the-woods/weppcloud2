@@ -82,7 +82,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
     async def send_heartbeats(cls):
         for client in list(cls.clients):
             client.ping_client()
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.1)
 
     @classmethod
     def check_clients(cls):
@@ -93,7 +93,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         stale_clients = set()
 
         for client in cls.clients:
-            if (now - client.last_pong > 35) or \
+            if (now - client.last_pong > 65) or \
                (not client.ws_connection) or \
                (not client.ws_connection.stream.socket):
                 stale_clients.add(client)
