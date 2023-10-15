@@ -111,6 +111,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         future = asyncio.ensure_future(on_hset(pubsub, shared_redis, cls.clients))
         await future
 
+
 def preflight(prep: dict) -> dict:
     """
     Runs preflight check for running wepp
@@ -124,7 +125,7 @@ def preflight(prep: dict) -> dict:
 
     d = {}
 
-    d['sbs_map'] = 'attrs:has_sbs' in prep
+    d['sbs_map'] = prep.get('attrs:has_sbs', 'false') == 'true'
     d['channels'] = 'timestamps:build_channels' in prep
     d['outlet'] = _safe_gt(prep.get('timestamps:set_outlet'), prep.get('timestamps:build_channels'))
     d['subcatchments'] = _safe_gt(prep.get('timestamps:abstract_watershed'), prep.get('timestamps:build_channels'))
