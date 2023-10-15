@@ -7,7 +7,7 @@ import tornado.websocket
 import aioredis
 
 # Constants
-REDIS_URL = 'redis://localhost'
+REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost')
 HEARTBEAT_INTERVAL = 30000  # in milliseconds
 CLIENT_CHECK_INTERVAL = 5000  # in milliseconds
 REDIS_KEY_PATTERN = '__keyspace@0__:*'
