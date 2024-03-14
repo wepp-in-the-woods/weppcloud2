@@ -133,6 +133,7 @@ def preflight(prep: dict) -> dict:
     d['soils'] = _safe_gt(prep.get('timestamps:build_soils'), prep.get('timestamps:abstract_watershed')) and \
                  _safe_gt(prep.get('timestamps:build_soils'), prep.get('timestamps:build_landuse'))
     d['climate'] = _safe_gt(prep.get('timestamps:build_climate'), prep.get('timestamps:abstract_watershed'))
+    d['rap_ts'] = _safe_gt(prep.get('timestamps:build_rap_ts'), prep.get('timestamps:build_climate'))
     d['wepp'] = _safe_gt(prep.get('timestamps:run_wepp'), prep.get('timestamps:build_landuse')) and \
                 _safe_gt(prep.get('timestamps:run_wepp'), prep.get('timestamps:build_soils')) and \
                 _safe_gt(prep.get('timestamps:run_wepp'), prep.get('timestamps:build_climate'))
