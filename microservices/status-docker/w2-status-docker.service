@@ -1,0 +1,16 @@
+[Unit]
+Description=W2-Status Docker Compose Application Service
+Requires=docker.service
+After=docker.service
+
+[Service]
+WorkingDirectory=/workdir/weppcloud2/microservices/status-docker
+ExecStart=/usr/bin/docker-compose up
+ExecStop=/usr/bin/docker-compose down
+RestartSec=10
+TimeoutStartSec=0
+Restart=always
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

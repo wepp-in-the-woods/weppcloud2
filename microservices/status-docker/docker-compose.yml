@@ -1,0 +1,26 @@
+version: '3'
+services:
+  haproxy:
+    image: haproxy:latest
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
+    ports:
+      - "9002:9002"  # HAProxy will listen on port 80 of the host
+    depends_on:
+      - w2_status_app
+
+  w2_status_app:
+    build:
+      context: ./  # Directory containing the Dockerfile and source code
+      dockerfile: Dockerfile  # Only necessary if your Dockerfile has a different name
+    environment:
+      REDIS_URL: "redis://wepp.cloud:6379"  # Connecting to host machine's Redis
+    expose:
+      - "9002"  # Port the Tornado app listens on
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+

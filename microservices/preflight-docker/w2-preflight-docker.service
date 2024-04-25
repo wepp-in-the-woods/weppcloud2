@@ -1,0 +1,15 @@
+[Unit]
+Description=W2-Preflight Docker Compose Application Service
+Requires=docker.service
+After=docker.service
+
+[Service]
+WorkingDirectory=/workdir/weppcloud2/microservices/preflight-docker
+ExecStart=/usr/bin/docker-compose up
+ExecStop=/usr/bin/docker-compose down
+TimeoutStartSec=0
+Restart=always
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
