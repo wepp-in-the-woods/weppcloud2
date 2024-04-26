@@ -5,19 +5,70 @@ services:
     volumes:
       - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
     ports:
-      - "9002:9002"  # HAProxy will listen on port 80 of the host
+      - "9002:9002"
     depends_on:
-      - w2_status_app
+      - w2_status_app1
+      - w2_status_app2
+      - w2_status_app3
+      - w2_status_app4
 
-  w2_status_app:
+  w2_status_app1:
     build:
-      context: ./  # Directory containing the Dockerfile and source code
-      dockerfile: Dockerfile  # Only necessary if your Dockerfile has a different name
+      context: ./
+      dockerfile: Dockerfile
     environment:
 #      REDIS_URL: "redis://wepp.cloud:6379"  # wepp2
-      REDIS_URL: "redis://172.17.0.1:6379"  # wepp1
+      REDIS_URL: "redis://172.17.0.1:6379"
     expose:
-      - "9002"  # Port the Tornado app listens on
+      - "9002"
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  w2_status_app2:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    environment:
+#      REDIS_URL: "redis://wepp.cloud:6379"  # wepp2
+      REDIS_URL: "redis://172.17.0.1:6379"
+    expose:
+      - "9002"
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  w2_status_app3:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    environment:
+#      REDIS_URL: "redis://wepp.cloud:6379"  # wepp2
+      REDIS_URL: "redis://172.17.0.1:6379"
+    expose:
+      - "9002"
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  w2_status_app4:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    environment:
+#      REDIS_URL: "redis://wepp.cloud:6379"  # wepp2
+      REDIS_URL: "redis://172.17.0.1:6379"
+    expose:
+      - "9002"
     restart: always
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9002/health"]
