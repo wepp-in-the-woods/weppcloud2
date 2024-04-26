@@ -25,6 +25,8 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
     async def open(self, args):
         global shared_redis
 
+        self.stop_event = asyncio.Event()
+
         args = os.path.split(args)[-1]
         self.run_id, self.channel = args.split(':')
 
@@ -35,8 +37,6 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
 
         await self.subscribe_to_redis()
 
-        # Create an Event to signal when the coroutine should stop
-        self.stop_event = asyncio.Event()
         asyncio.ensure_future(self.proxy_message())
 
     async def proxy_message(self):

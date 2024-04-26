@@ -43,6 +43,8 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
     async def open(self, run_id):
         global shared_redis
 
+        self.stop_event = asyncio.Event()
+
         self.clients.add(self)
         self.run_id = os.path.split(run_id)[-1]
         self.last_pong = tornado.ioloop.IOLoop.current().time()

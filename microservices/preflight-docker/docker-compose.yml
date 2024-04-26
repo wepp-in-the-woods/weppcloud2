@@ -14,7 +14,8 @@ services:
       context: ./  # Directory containing the Dockerfile and source code
       dockerfile: Dockerfile  # Only necessary if your Dockerfile has a different name
     environment:
-      REDIS_URL: "redis://wepp.cloud:6379"  # Connecting to host machine's Redis
+#      REDIS_URL: "redis://wepp.cloud:6379"  # wepp2
+      REDIS_URL: "redis://172.17.0.1:6379"  # wepp1
     expose:
       - "9001"  # Port the Tornado app listens on
     restart: always

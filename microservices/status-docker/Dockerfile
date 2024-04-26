@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-RUN apt-get update && apt-get install -y curl \
+RUN apt-get update && apt-get install -y curl net-tools netcat-traditional bash\
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install -r requirements.txt
