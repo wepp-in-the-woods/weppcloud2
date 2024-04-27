@@ -25,9 +25,16 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
     async def open(self, args):
         global shared_redis
 
+        args = os.path.split(args)[-1]  # Split the path and take the last part
+
+        # Check if the args is "health"
+        if args == "health":
+            await self.write_message("OK")  # Send "OK" to the client
+            self.close()  # Close the WebSocket connection
+            return  # Stop further processing
+
         self.stop_event = asyncio.Event()
 
-        args = os.path.split(args)[-1]
         self.run_id, self.channel = args.split(':')
 
         self.clients.add(self)

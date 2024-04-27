@@ -40,13 +40,20 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         # Consider adding more checks for origin validation if needed
         return True
 
-    async def open(self, run_id):
+    async def open(self, args):
         global shared_redis
+
+        self.run_id = args = os.path.split(args)[-1]  # Split the path and take the last part
+
+        # Check if the args is "health"
+        if args == "health":
+            await self.write_message("OK")  # Send "OK" to the client
+            self.close()  # Close the WebSocket connection
+            return  # Stop further processing
 
         self.stop_event = asyncio.Event()
 
         self.clients.add(self)
-        self.run_id = os.path.split(run_id)[-1]
         self.last_pong = tornado.ioloop.IOLoop.current().time()
 
         print(f"run_id = {self.run_id}")
