@@ -6,6 +6,17 @@ import socket
 import asyncio
 import websockets
 from websockets.exceptions import WebSocketException
+import time 
+
+
+class Timer:
+    def __init__(self):
+        self.t0 = time.monotonic_ns()
+
+
+    def elapsed_ms(self):
+        return int((time.monotonic_ns() - self.t0) * 1E-6)
+
 
 _thisdir = os.path.dirname(__file__)
 sys.path.append(_join(_thisdir, '../'))
@@ -13,73 +24,114 @@ from discord_client import send_discord_message
 
 fqdn = socket.getfqdn()
 
+GET = 'GET'
+POST = 'POST'
+USER_AGENT = 'WeppCloudQos'
+
+headers = {
+    'User-Agent': USER_AGENT,
+    'Accept': 'application/json, text/javascript, */*; q=0.01',
+    'Origin': 'https://wepp.cloud/',
+    'Referer': 'https://wepp.cloud/weppcloud/',
+}
+
+prism_headers = {
+    'User-Agent': USER_AGENT,
+    'Accept': 'application/json, text/javascript, */*; q=0.01',
+    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+    'Origin': 'https://wepp.cloud/',
+    'Referer': 'https://wepp.cloud/weppcloud/',
+    'Accept-Language': 'en-US,en;q=0.5',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'X-Requested-With': 'XMLHttpRequest',
+    'DNT': '1',
+    'Connection': 'keep-alive',
+    'Sec-Fetch-Dest': 'empty',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Site': 'same-origin'
+}
+prism_data =  'lon=-123.0000&lat=45.0000&proc=location_data'
+
 
 services = [
-    ('weppcloud', 'https://wepp.cloud/weppcloud/health'),
-    ('preflight', 'wss://wepp.cloud/weppcloud-microservices/preflight/heath'),
-    ('status'   , 'wss://wepp.cloud/weppcloud-microservices/status/health'),
-    ('wmesque'  , 'https://wepp.cloud/webservices/wmesque/health'),
-    ('metquery' , 'https://wepp.cloud/webservices/metquery/health'),
-    ('cligen' , 'https://wepp.cloud/webservices/cligen/health'),
+    ('wepp.cloud'        , 'weppcloud' , 'https://wepp.cloud/weppcloud/health', GET, None, headers),
+    ('wepp.cloud'        , 'preflight' , 'wss://wepp.cloud/weppcloud-microservices/preflight/heath', GET, None, headers),
+    ('wepp.cloud'        , 'status'    , 'wss://wepp.cloud/weppcloud-microservices/status/health', GET, None, headers),
+    ('wepp.cloud'        , 'wmesque'   , 'https://wepp.cloud/webservices/wmesque/health', GET, None, headers),
+    ('wepp.cloud'        , 'metquery'  , 'https://wepp.cloud/webservices/metquery/health', GET, None, headers),
+    ('wepp.cloud'        , 'cligen'    , 'https://wepp.cloud/webservices/cligen/health', GET, None, headers),
+    ('climate-dev'       , 'gridmet'   , 'https://climate-dev.nkn.uidaho.edu/Services/', GET, None, headers),
+    ('daymet.ornl'       , 'daymet'    , 'https://daymet.ornl.gov/single-pixel/api#/data', GET, None, headers),
+    ('prism.oregonstate' , 'prism'     , 'https://www.prism.oregonstate.edu/explorer/dataexplorer/rpc.php', POST, prism_data, prism_headers),
 ]
 
 
-async def make_ws_request(uri, retries=3):
+async def make_ws_request(uri, retries=3, headers=None):
     for attempt in range(retries):
         try:
-            async with websockets.connect(uri, timeout=10) as websocket:
-                # Optionally send a message if needed
-                # await websocket.send("Your message here")
-
-                # Receive a message
+            timer = Timer()
+            async with websockets.connect(uri, timeout=10, extra_headers=headers) as websocket:                
                 response = await websocket.recv()
-                return True
+                return True, timer.elapsed_ms()
         except WebSocketException as e:
             print(f"Attempt {attempt + 1} failed: {e}")
             if attempt < retries - 1:
                 await asyncio.sleep(1)  # wait for 1 second before retrying if not the last attempt
-    return False
+    return False, None
 
 
-def make_http_request(url, retries=3):
+def make_http_request(url, retries=3, method=None, headers=None, data=None):
     for attempt in range(retries):
         try:
-            response = requests.get(url, timeout=10)
+            timer = Timer()
+            if method == POST:
+                response = requests.post(url, timeout=10, headers=headers, data=data)
+            else:
+                response = requests.get(url, timeout=10, headers=headers)
+#            print(response.text)
             response.raise_for_status()  # Raises an HTTPError for bad responses
-            ms = int(response.elapsed.total_seconds() * 1000)
-            return True
+            return True, timer.elapsed_ms()
         except requests.exceptions.RequestException as e:
             print(f"Attempt {attempt + 1} failed: {e}")
-    return False
+    return False, None
 
 
-async def request_router(url, retries=3):
+async def request_router(url, retries=3, method=None, data=None, headers=None):
     if url.startswith('http'):
-        return make_http_request(url, retries=retries)
+        return make_http_request(url, retries=retries, method=method, headers=headers, data=data)
     else:
-        return await make_ws_request(url, retries=retries)
+        return await make_ws_request(url, retries=retries, headers=None)
+
 
 if __name__ == "__main__":
-    stati = []
-    for service, url in services:
-        status = asyncio.run(request_router(url))
-        stati.append((service, status))
 
+
+    channel = "health"
     message = []
     message.append("```")  # Start of code block to ensure monospace font
-    message.append("Service      Status")  # Column headers
-    message.append("---------------------")  # Header separator
-    for service, status in stati:
+    message.append("Host              Service        ms")  # Column headers
+    message.append("─" * 36 ) # U+2500 Header separator
+
+    for service in services:
+        print(service)
+        host, service, url, method, data, headers = service
+        status, ms = asyncio.run(request_router(url, retries=3, method=method, headers=headers, data=data))
         emoji = ("\U0001F534", "\U0001F7E2")[status]
-        # Format each line: pad the service name to a fixed length for alignment
-        message.append(f"{service.ljust(16)} {emoji}")
+        
+        if not status:
+            channel = "error"
+
+        if ms is None:
+            ms_str = ''
+        else:
+            ms_str = str(ms)
+
+        message.append(f"{host:<17} {emoji} {service:<9} {ms_str:>5}")
     message.append("```")  # End of code block
 
     # Join all parts of the message into a single string with newlines
     message = '\n'.join(message)
 
-    if all([status for service, status in stati]):
-        send_discord_message(message, "health")
-    else:
-        send_discord_message(message, "error")
+    print(message)
+    send_discord_message(message, channel)
 
