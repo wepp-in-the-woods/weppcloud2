@@ -71,6 +71,80 @@ sudo crontab -e
 ```
 
 
+### Makefile Usage Documentation
+
+This Makefile automates the process of building, starting, stopping, and managing Docker containers and systemd services for the `w2-status` application. Below is a guide on how to use each command defined in the Makefile.
+
+## Requirements
+- Docker and Docker Compose must be installed on the host machine.
+- Systemd must be installed and the `w2-status-docker.service` must be properly configured on the host system.
+- Ensure you have the necessary permissions to execute Docker and systemd commands.
+
+## Commands
+
+- **Build**
+  - **Purpose**: Builds the Docker containers as defined in the `docker-compose.yml`.
+  - **Command**: `make build`
+  - **Example**:
+    ```bash
+    make build
+    ```
+
+- **Start**
+  - **Purpose**: Starts the Docker containers using systemd.
+  - **Command**: `make start`
+  - **Example**:
+    ```bash
+    make start
+    ```
+
+- **Stop**
+  - **Purpose**: Stops the Docker containers using systemd.
+  - **Command**: `make stop`
+  - **Example**:
+    ```bash
+    make stop
+    ```
+
+- **Restart**
+  - **Purpose**: Restarts the Docker containers using systemd.
+  - **Command**: `make restart`
+  - **Example**:
+    ```bash
+    make restart
+    ```
+
+- **Up**
+  - **Purpose**: Starts all containers using Docker Compose.
+  - **Command**: `make up`
+  - **Example**:
+    ```bash
+    make up
+    ```
+
+- **Down**
+  - **Purpose**: Stops all containers and removes containers, networks, volumes, and images created by `up`.
+  - **Command**: `make down`
+  - **Example**:
+    ```bash
+    make down
+    ```
+
+- **Docker-Exec**
+  - **Purpose**: Opens a bash shell inside the `w2_status_app_1` container.
+  - **Command**: `make docker-exec`
+  - **Example**:
+    ```bash
+    make docker-exec
+    ```
+
+## Configuration
+- The Makefile automatically sets the `REDIS_URL` environment variable based on the hostname of the machine where it is run. `wepp1` will use a different Redis URL than other hosts.
+
+Ensure that you review and understand each part of the Makefile and the Docker configurations to tailor the setup to your specific needs.
+"""
+
+
 ### Troubleshooting
 
 

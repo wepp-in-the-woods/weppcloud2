@@ -17,8 +17,7 @@ services:
       context: ./
       dockerfile: Dockerfile
     environment:
-#      REDIS_URL: "redis://wepp.cloud:6379"  # wepp2
-      REDIS_URL: "redis://172.17.0.1:6379"
+      REDIS_URL: ${REDIS_URL}
     expose:
       - "9002"
     restart: always
@@ -33,8 +32,7 @@ services:
       context: ./
       dockerfile: Dockerfile
     environment:
-#      REDIS_URL: "redis://wepp.cloud:6379"  # wepp2
-      REDIS_URL: "redis://172.17.0.1:6379"
+      REDIS_URL: ${REDIS_URL}
     expose:
       - "9002"
     restart: always
@@ -49,8 +47,7 @@ services:
       context: ./
       dockerfile: Dockerfile
     environment:
-#      REDIS_URL: "redis://wepp.cloud:6379"  # wepp2
-      REDIS_URL: "redis://172.17.0.1:6379"
+      REDIS_URL: ${REDIS_URL}
     expose:
       - "9002"
     restart: always
@@ -65,8 +62,7 @@ services:
       context: ./
       dockerfile: Dockerfile
     environment:
-#      REDIS_URL: "redis://wepp.cloud:6379"  # wepp2
-      REDIS_URL: "redis://172.17.0.1:6379"
+      REDIS_URL: ${REDIS_URL}
     expose:
       - "9002"
     restart: always
