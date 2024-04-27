@@ -14,15 +14,6 @@ export REDIS_URL
 build:
 	docker-compose build
 
-restart:
-	systemctl restart w2-status-docker.service
-
-stop:
-	systemctl stop w2-status-docker.service
-
-start:
-	systemctl start w2-status-docker.service
-
 up:
 	docker-compose up
 

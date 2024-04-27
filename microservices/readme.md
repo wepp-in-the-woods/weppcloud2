@@ -54,6 +54,19 @@ sudo cp w2-preflight-docker.service /etc/systemd/system
 sudo systemctl enable w2-preflight-docker.service
 ```
 
+
+**Specify REDIS_URL in the Service section**
+
+*wepp1*
+```
+Environment="REDIS_URL=redis://172.17.0.1:6379"
+```
+
+*Not wepp1*
+```
+Environment="REDIS_URL=redis://wepp.cloud:6379"
+```
+
 #### Start Service
 
 ```
@@ -88,30 +101,6 @@ This Makefile automates the process of building, starting, stopping, and managin
   - **Example**:
     ```bash
     make build
-    ```
-
-- **Start**
-  - **Purpose**: Starts the Docker containers using systemd.
-  - **Command**: `make start`
-  - **Example**:
-    ```bash
-    make start
-    ```
-
-- **Stop**
-  - **Purpose**: Stops the Docker containers using systemd.
-  - **Command**: `make stop`
-  - **Example**:
-    ```bash
-    make stop
-    ```
-
-- **Restart**
-  - **Purpose**: Restarts the Docker containers using systemd.
-  - **Command**: `make restart`
-  - **Example**:
-    ```bash
-    make restart
     ```
 
 - **Up**
