@@ -22,6 +22,7 @@ def _try_int_parse(x):
     except (ValueError, TypeError):
         return None
 
+
 def _safe_gt(a, b):
     a = _try_int_parse(a)
     b = _try_int_parse(b)
@@ -32,9 +33,8 @@ def _safe_gt(a, b):
     return a > b
 
 
-
 class WebSocketHandler(tornado.websocket.WebSocketHandler):
-    clients = set()
+    clients = dict()
 
     def check_origin(self, origin):
         # Consider adding more checks for origin validation if needed
@@ -43,7 +43,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
     async def open(self, args):
         global shared_redis
 
-        self.run_id = args = os.path.split(args)[-1]  # Split the path and take the last part
+        self.run_id = args = os.path.split(args)[-1].strip()  # Split the path and take the last part
 
         # Check if the args is "health"
         if args == "health":
@@ -53,7 +53,11 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
 
         self.stop_event = asyncio.Event()
 
-        self.clients.add(self)
+        if args not in WebSocketHandler.clients:
+            WebSocketHandler.clients[args] = {self}
+        else:
+            WebSocketHandler.clients[args].add(self)
+
         self.last_pong = tornado.ioloop.IOLoop.current().time()
 
         print(f"run_id = {self.run_id}")
@@ -75,9 +79,14 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
             print("Error decoding message")
 
     def close(self):
+        run_id = self.run_id
         # Remove the client from the clients set
-        if self in self.clients:
-            self.clients.remove(self)
+        if run_id in WebSocketHandler.clients:
+            if self in WebSocketHandler.clients[run_id]:
+                WebSocketHandler.clients[run_id].remove(self)
+            if len(WebSocketHandler.clients[run_id]) == 0:
+                del WebSocketHandler.clients[run_id]
+        super().close()
 
     def ping_client(self):
         # Ensure client connection is alive before sending message
@@ -86,12 +95,12 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         self.write_message(json.dumps({"type": "ping"}))
         return 1
 
-
     @classmethod
     async def send_heartbeats(cls):
-        for client in list(cls.clients):
-            client.ping_client()
-            await asyncio.sleep(0.1)
+        for run_id in cls.clients:
+            for client in list(cls.clients[run_id]):
+                client.ping_client()
+                await asyncio.sleep(0.1)
 
     @classmethod
     def check_clients(cls):
@@ -101,11 +110,12 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         # Identify stale clients
         stale_clients = set()
 
-        for client in cls.clients:
-            if (now - client.last_pong > 65) or \
-               (not client.ws_connection) or \
-               (not client.ws_connection.stream.socket):
-                stale_clients.add(client)
+        for run_id in cls.clients:
+            for client in cls.clients[run_id]:
+                if (now - client.last_pong > 65) or \
+                   (not client.ws_connection) or \
+                   (not client.ws_connection.stream.socket):
+                    stale_clients.add(client)
 
         # Close stale connections
         for client in stale_clients:
@@ -165,25 +175,23 @@ def preflight(prep: dict) -> dict:
 async def on_hset(channel: aioredis.client.PubSub, redis, clients):
     while True:
         try:
-            async with async_timeout.timeout(1):
+            async with async_timeout.timeout(5):
                 message = await channel.get_message(ignore_subscribe_messages=True)
                 if message is not None:
                     run_id = message['channel'].split(b':')[-1].decode('utf-8')
-                    hashmap = await redis.hgetall(run_id)
-                    hashmap = {k.decode('utf-8'): v.decode('utf-8') for k, v in hashmap.items()}
-                    preflight_d = preflight(hashmap)
-                    print(preflight_d)
-                    for client in clients:
-                        print(client.run_id == run_id, client.run_id, run_id)
-                        if client.run_id == run_id:
+                    if run_id in clients:
+                        hashmap = await redis.hgetall(run_id)
+                        hashmap = {k.decode('utf-8'): v.decode('utf-8') for k, v in hashmap.items()}
+                        preflight_d = preflight(hashmap)
+                        print(preflight_d)
+                        for client in clients['run_id']:
                             print(f'send to {run_id}')
                             await client.write_message(
                                 json.dumps({"type": "preflight", "checklist": preflight_d}))
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0.001)
         except asyncio.TimeoutError:
-            # Consider logging timeout error for debugging purposes
+            print('on_hset asyncio timeout error')
             pass
-
 
 def send_heartbeats_callback():
     tornado.ioloop.IOLoop.current().add_callback(WebSocketHandler.send_heartbeats)

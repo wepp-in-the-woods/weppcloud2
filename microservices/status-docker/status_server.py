@@ -37,7 +37,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
 
         self.run_id, self.channel = args.split(':')
 
-        self.clients.add(self)
+        WebSocketHandler.clients.add(self)
         self.last_pong = tornado.ioloop.IOLoop.current().time()
 
         print(f'run_id = {self.run_id}, channel = {self.channel}')
@@ -86,14 +86,17 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
 
     def close(self):
         # Remove the client from the clients set
-        if self in self.clients:
-            self.clients.remove(self)
+        if self in WebSocketHandler.clients:
+            WebSocketHandler.clients.remove(self)
 
         if hasattr(self, 'pubsub'):
             asyncio.ensure_future(self.unsubscribe_to_redis())
 
             # Set the stop event to signal to proxy_message to exit
             self.stop_event.set()
+
+        super().close()
+
 
     def ping_client(self):
         # Ensure client connection is alive before sending message
