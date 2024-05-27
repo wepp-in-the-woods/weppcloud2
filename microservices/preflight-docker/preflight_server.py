@@ -66,9 +66,13 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         hashmap = await shared_redis.hgetall(self.run_id)
         hashmap = {k.decode('utf-8'): v.decode('utf-8') for k, v in hashmap.items()}
         preflight_d = preflight(hashmap)
+        lock_d = lock_statuses(hashmap)
 
         # Send the checklist to the client
-        await self.write_message(json.dumps({"type": "preflight", "checklist": preflight_d}))
+        await self.write_message(json.dumps(
+            {"type": "preflight", 
+             "checklist": preflight_d,
+             "lock_statuses": lock_d}))
 
     async def on_message(self, message):
         try:
@@ -130,6 +134,16 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         future = asyncio.ensure_future(on_hset(pubsub, shared_redis, cls.clients))
         await future
 
+
+def lock_statuses(prep: dict) -> dict:
+    d = {}
+    d['watershed'] = prep.get('locked:watershed', False) == 'true'
+    d['climate'] = prep.get('locked:climate', False) == 'true'
+    d['wepp'] = prep.get('locked:wepp', False) == 'true'
+    d['soils'] = prep.get('locked:soils', False) == 'true'
+    d['landuse'] = prep.get('locked:landuse', False) == 'true'
+    d['disturbed'] = prep.get('locked:disturbed', False) == 'true'
+    return d
 
 def preflight(prep: dict) -> dict:
     """

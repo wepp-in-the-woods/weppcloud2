@@ -1,3 +1,4 @@
 .DS_Store
 .bot_token
 __pycache__
+.env
