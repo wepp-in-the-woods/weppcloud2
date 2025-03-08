@@ -198,10 +198,14 @@ async def on_hset(channel: aioredis.client.PubSub, redis, clients):
                         hashmap = {k.decode('utf-8'): v.decode('utf-8') for k, v in hashmap.items()}
                         preflight_d = preflight(hashmap)
                         print(preflight_d)
-                        for client in clients['run_id']:
+                        for client in list(clients[run_id]):
                             print(f'send to {run_id}')
-                            await client.write_message(
-                                json.dumps({"type": "preflight", "checklist": preflight_d}))
+                            try:
+                                await client.write_message(
+                                    json.dumps({"type": "preflight", "checklist": preflight_d}))
+                            except tornado.websocket.WebSocketClosedError:
+                                pass
+
                 await asyncio.sleep(0.001)
         except asyncio.TimeoutError:
             print('on_hset asyncio timeout error')
