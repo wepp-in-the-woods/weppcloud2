@@ -102,6 +102,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         # Ensure client connection is alive before sending message
         if not self.ws_connection or not self.ws_connection.stream.socket:
             return 0
+        #self.write_message(json.dumps({"type": "hangup"}))
         self.write_message(json.dumps({"type": "ping"}))
         return 1
 
