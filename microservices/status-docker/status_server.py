@@ -74,7 +74,10 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
     async def unsubscribe_to_redis(self):
         global shared_redis
 
-        await self.pubsub.unsubscribe(f"{self.run_id}:{self.channel}")
+        if hasattr(self, 'pubsub'):
+            await self.pubsub.unsubscribe(f"{self.run_id}:{self.channel}")
+            self.pubsub.close()  # Explicitly close the pubsub connection after unsubscribing
+            print(f"Unsubscribed and closed pubsub for {self.run_id}:{self.channel}")
 
     async def on_message(self, message):
         try:
@@ -136,10 +139,6 @@ def send_heartbeats_callback():
     tornado.ioloop.IOLoop.current().add_callback(WebSocketHandler.send_heartbeats)
 
 
-def send_heartbeats_callback():
-    tornado.ioloop.IOLoop.current().add_callback(WebSocketHandler.send_heartbeats)
-
-
 class HealthCheckHandler(tornado.web.RequestHandler):
     def get(self):
         self.write("OK")
@@ -157,6 +156,10 @@ async def main():
     tornado.ioloop.PeriodicCallback(send_heartbeats_callback, HEARTBEAT_INTERVAL).start()
     tornado.ioloop.PeriodicCallback(WebSocketHandler.check_clients, CLIENT_CHECK_INTERVAL).start()
 
+    # Ensure Redis connection is closed properly when the application shuts down
+    tornado.ioloop.IOLoop.current().add_callback(lambda: shared_redis.close())
+
 if __name__ == "__main__":
     asyncio.get_event_loop().run_until_complete(main())
     asyncio.get_event_loop().run_forever()
+

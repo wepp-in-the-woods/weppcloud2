@@ -90,7 +90,18 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
                 WebSocketHandler.clients[run_id].remove(self)
             if len(WebSocketHandler.clients[run_id]) == 0:
                 del WebSocketHandler.clients[run_id]
+        
+        # Ensure that the Redis pubsub is unsubscribed and closed
+        if hasattr(self, 'pubsub'):
+            asyncio.ensure_future(self.unsubscribe_from_redis())
+        
         super().close()
+
+    async def unsubscribe_from_redis(self):
+        if hasattr(self, 'pubsub'):
+            await self.pubsub.unsubscribe(REDIS_KEY_PATTERN)
+            self.pubsub.close()  # Explicitly close the pubsub connection
+            print(f"Unsubscribed and closed pubsub for {self.run_id}")
 
     def ping_client(self):
         # Ensure client connection is alive before sending message
@@ -231,7 +242,10 @@ async def main():
     tornado.ioloop.PeriodicCallback(WebSocketHandler.check_clients, CLIENT_CHECK_INTERVAL).start()
     await WebSocketHandler.listen_to_redis()
 
+    # Close the Redis connection gracefully when shutting down
+    tornado.ioloop.IOLoop.current().add_callback(lambda: shared_redis.close())
+
+
 if __name__ == "__main__":
     tornado.ioloop.IOLoop.current().run_sync(main)
-
 
