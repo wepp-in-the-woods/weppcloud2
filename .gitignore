@@ -1,4 +1,8 @@
 .DS_Store
 .bot_token
 __pycache__
+<<<<<<< HEAD
 .env
+=======
+doc/postgres.md
+>>>>>>> 4dce107 (add server sripts)
