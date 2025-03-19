@@ -22,6 +22,9 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         # Consider adding more checks for origin validation if needed
         return True
 
+    def initialize(self):
+        self.stop_event = asyncio.Event()
+
     async def open(self, args):
         global shared_redis
 
@@ -32,8 +35,6 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
             await self.write_message("OK")  # Send "OK" to the client
             self.close()  # Close the WebSocket connection
             return  # Stop further processing
-
-        self.stop_event = asyncio.Event()
 
         self.run_id, self.channel = args.split(':')
 
@@ -57,11 +58,16 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
                         self.write_message(
                             json.dumps({"type": "status", "data": data}))
                     await asyncio.sleep(0.001)
-            except asyncio.TimeoutError:
-                pass
+            except tornado.websocket.WebSocketClosedError as e:
+                # If the connection is already closed, break the loop
+                print(f'WebSocketClosedError in proxy_message: {e}')
+                break
+
             except Exception as e:
-                print(f"Unexpected error in proxy_message: {e}")
-                break  # or decide how you want to handle unexpected errors
+                # Other truly unexpected errors
+                print(f'Unexpected error in proxy_message: {e}')
+                self.close()
+                break  # Don’t loop forever if we intentionally closed
 
     async def subscribe_to_redis(self):
         global shared_redis
@@ -76,8 +82,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
 
         if hasattr(self, 'pubsub'):
             await self.pubsub.unsubscribe(f"{self.run_id}:{self.channel}")
-            self.pubsub.close()  # Explicitly close the pubsub connection after unsubscribing
-            print(f"Unsubscribed and closed pubsub for {self.run_id}:{self.channel}")
+            await self.pubsub.close()  # Explicitly close the pubsub connection after unsubscribing
 
     async def on_message(self, message):
         try:
@@ -88,18 +93,19 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
             print("Error decoding message")
 
     def close(self):
-        # Remove the client from the clients set
+        # This method initiates the teardown. We do minimal work here.
+        # If you need to ensure the read loop stops, you can set stop_event here.
+        if not self.stop_event.is_set():
+            self.stop_event.set()
+        super().close()
+
+    def on_close(self):
+        # The connection is actually closed now; do all final cleanup.
         if self in WebSocketHandler.clients:
             WebSocketHandler.clients.remove(self)
 
-        if hasattr(self, 'pubsub'):
-            asyncio.ensure_future(self.unsubscribe_to_redis())
-
-            # Set the stop event to signal to proxy_message to exit
-            self.stop_event.set()
-
-        super().close()
-
+        asyncio.ensure_future(self.unsubscribe_to_redis())
+        super().on_close()  # Make sure to call the parent’s on_close
 
     def ping_client(self):
         # Ensure client connection is alive before sending message
@@ -108,7 +114,6 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         #self.write_message(json.dumps({"type": "hangup"}))
         self.write_message(json.dumps({"type": "ping"}))
         return 1
-
 
     @classmethod
     async def send_heartbeats(cls):
@@ -132,7 +137,6 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
 
         # Close stale connections
         for client in stale_clients:
-            print(f"Closing stale connection with {client.run_id}")
             client.close()
 
 def send_heartbeats_callback():
