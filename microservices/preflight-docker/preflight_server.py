@@ -209,7 +209,7 @@ async def on_hset(channel: aioredis.client.PubSub, redis, clients):
                         hashmap = {k.decode('utf-8'): v.decode('utf-8') for k, v in hashmap.items()}
                         preflight_d = preflight(hashmap)
                         print(preflight_d)
-                        for client in list(clients[run_id]):
+                        for client in list(clients.get(run_id, [])):
                             print(f'send to {run_id}')
                             try:
                                 await client.write_message(
