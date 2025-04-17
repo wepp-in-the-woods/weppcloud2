@@ -165,6 +165,9 @@ def preflight(prep: dict) -> dict:
 
     Returns:
     - dict: preflight checklist
+
+
+    The timestamps are from wepppy.nodb.redis_prep.TaskEnum set by wepppy.nodb.redis_prep.RedisPrep.timestamp()
     """
 
     d = {}
@@ -193,6 +196,7 @@ def preflight(prep: dict) -> dict:
                  _safe_gt(prep.get('timestamps:run_watar'), prep.get('timestamps:build_soils')) and \
                  _safe_gt(prep.get('timestamps:run_watar'), prep.get('timestamps:build_climate')) and \
                  _safe_gt(prep.get('timestamps:run_watar'), prep.get('timestamps:run_wepp'))
+    d['dss_export'] = _safe_gt(prep.get('timestamps:dss_export'), prep.get('timestamps:run_wepp'))
 
     return d
 
