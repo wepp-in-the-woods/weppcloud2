@@ -1,169 +1,177 @@
+#!/usr/bin/env python
+"""
+WebSocket-to-Redis proxy using Tornado and redis-py 6.x (async).
+Listens on :9002 and forwards Pub/Sub traffic {run_id}:{channel} → WebSocket.
+
+• Uses redis.asyncio (aioredis is now folded into redis-py)
+• Health-checks idle sockets
+• Retries with exponential back-off
+• Suppresses tornado.access logs for GET /health
+"""
+
 import os
 import json
 import asyncio
+import logging
 import async_timeout
+
 import tornado.ioloop
+import tornado.web
 import tornado.websocket
-import aioredis
 
-# Constants
-REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost')
-HEARTBEAT_INTERVAL = 30000  # in milliseconds
-CLIENT_CHECK_INTERVAL = 5000  # in milliseconds
-DB = 2
+import redis.asyncio as aioredis
+from redis.retry import Retry
+from redis.backoff import ExponentialBackoff
+from redis.exceptions import ConnectionError, TimeoutError
 
-shared_redis = None  # Global variable to hold the shared Redis connection
+# ───────────────────────── Config ──────────────────────────
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost")
+DB = int(os.getenv("REDIS_DB", 2))
 
+HEARTBEAT_INTERVAL_MS = 30_000
+CLIENT_CHECK_INTERVAL_MS = 5_000
 
+# ─────────────────── Redis connection pool ─────────────────
+async def new_redis():
+    """Return a fresh Redis connection with healthy defaults."""
+    return await aioredis.from_url(
+        REDIS_URL,
+        db=DB,
+        health_check_interval=30,                       # send PING every 30 s
+        retry_on_timeout=True,
+        retry=Retry(backoff=ExponentialBackoff(1, 60), retries=-1),
+        encoding="utf-8",
+        decode_responses=True,
+    )
+
+shared_redis: aioredis.Redis | None = None  # set in main()
+
+# ───────────────────── Logging tweaks ──────────────────────
+logging.basicConfig(level=logging.INFO)
+
+# suppress “GET /health …” access logs
+logging.getLogger("tornado.access").addFilter(
+    lambda rec: "/health" not in rec.getMessage()
+)
+
+# ───────────────────── WebSocket handler ───────────────────
 class WebSocketHandler(tornado.websocket.WebSocketHandler):
-    clients = set()
+    clients: set["WebSocketHandler"] = set()
 
-    def check_origin(self, origin):
-        # Consider adding more checks for origin validation if needed
+    def check_origin(self, origin):                   # disable CORS checks
         return True
 
-    def initialize(self):
-        self.stop_event = asyncio.Event()
-
-    async def open(self, args):
+    async def open(self, arg):
         global shared_redis
 
-        args = os.path.split(args)[-1]  # Split the path and take the last part
+        arg = os.path.split(arg)[-1].strip()
+        if arg == "health":
+            await self.write_message("OK")
+            self.close()
+            return
 
-        # Check if the args is "health"
-        if args == "health":
-            await self.write_message("OK")  # Send "OK" to the client
-            self.close()  # Close the WebSocket connection
-            return  # Stop further processing
-
-        self.run_id, self.channel = args.split(':')
+        try:
+            self.run_id, self.channel = arg.split(":")
+        except ValueError:
+            self.close()                              # bad path
+            return
 
         WebSocketHandler.clients.add(self)
         self.last_pong = tornado.ioloop.IOLoop.current().time()
-
-        print(f'run_id = {self.run_id}, channel = {self.channel}')
-
-        await self.subscribe_to_redis()
-
-        asyncio.ensure_future(self.proxy_message())
-
-    async def proxy_message(self):
-        while not self.stop_event.is_set():
-            try:
-                async with async_timeout.timeout(1):
-                    message = await self.pubsub.get_message(ignore_subscribe_messages=True)
-                    if message is not None:
-#                        print(f"(Reader) Message Received: {message}")
-                        data = message['data'].decode('utf-8')
-                        self.write_message(
-                            json.dumps({"type": "status", "data": data}))
-                    await asyncio.sleep(0.001)
-            except tornado.websocket.WebSocketClosedError as e:
-                # If the connection is already closed, break the loop
-                print(f'WebSocketClosedError in proxy_message: {e}')
-                break
-
-            except Exception as e:
-                # Other truly unexpected errors
-                print(f'Unexpected error in proxy_message: {e}')
-                self.close()
-                break  # Don’t loop forever if we intentionally closed
-
-    async def subscribe_to_redis(self):
-        global shared_redis
+        self.stop_event = asyncio.Event()
 
         self.pubsub = shared_redis.pubsub()
         await self.pubsub.subscribe(f"{self.run_id}:{self.channel}")
+        logging.info("WS subscribed to %s:%s", self.run_id, self.channel)
 
-        print(f'subscribed to {self.run_id}:{self.channel}')
+        asyncio.create_task(self._proxy_loop())
 
-    async def unsubscribe_to_redis(self):
+    # ────────── message pump ──────────
+    async def _proxy_loop(self):
+        while not self.stop_event.is_set():
+            try:
+                async with async_timeout.timeout(1):
+                    msg = await self.pubsub.get_message(ignore_subscribe_messages=True)
+                    if msg is not None:
+                        data = msg["data"]
+                        await self.write_message(json.dumps({"type": "status", "data": data}))
+                    await asyncio.sleep(0.001)
+
+            except tornado.websocket.WebSocketClosedError:
+                break
+            except (ConnectionError, TimeoutError) as e:
+                logging.warning("Redis trouble: %s – reconnecting …", e)
+                await asyncio.sleep(1)
+                await self._reconnect_pubsub()
+            except Exception as e:
+                logging.exception("Unexpected error; closing WS: %s", e)
+                break
+
+    async def _reconnect_pubsub(self):
         global shared_redis
+        shared_redis = await new_redis()
+        self.pubsub = shared_redis.pubsub()
+        await self.pubsub.subscribe(f"{self.run_id}:{self.channel}")
 
-        if hasattr(self, 'pubsub'):
-            await self.pubsub.unsubscribe(f"{self.run_id}:{self.channel}")
-            await self.pubsub.close()  # Explicitly close the pubsub connection after unsubscribing
-
-    async def on_message(self, message):
+    # ────────── WS plumbing ──────────
+    async def on_message(self, msg):
         try:
-            payload = json.loads(message)
-            if payload.get("type") == "pong":
+            if json.loads(msg).get("type") == "pong":
                 self.last_pong = tornado.ioloop.IOLoop.current().time()
         except json.JSONDecodeError:
-            print("Error decoding message")
-
-    def close(self):
-        # This method initiates the teardown. We do minimal work here.
-        # If you need to ensure the read loop stops, you can set stop_event here.
-        if not self.stop_event.is_set():
-            self.stop_event.set()
-        super().close()
+            pass
 
     def on_close(self):
-        # The connection is actually closed now; do all final cleanup.
-        if self in WebSocketHandler.clients:
-            WebSocketHandler.clients.remove(self)
+        WebSocketHandler.clients.discard(self)
+        if hasattr(self, "pubsub"):
+            asyncio.create_task(self.pubsub.unsubscribe(f"{self.run_id}:{self.channel}"))
+            asyncio.create_task(self.pubsub.aclose())
+        self.stop_event.set()
 
-        asyncio.ensure_future(self.unsubscribe_to_redis())
-        super().on_close()  # Make sure to call the parent’s on_close
-
-    def ping_client(self):
-        # Ensure client connection is alive before sending message
-        if not self.ws_connection or not self.ws_connection.stream.socket:
-            return 0
-        #self.write_message(json.dumps({"type": "hangup"}))
-        self.write_message(json.dumps({"type": "ping"}))
-        return 1
+    # ────────── heartbeat helpers ──────────
+    def _ping(self):
+        if self.ws_connection and self.ws_connection.stream.socket:
+            self.write_message('{"type":"ping"}')
 
     @classmethod
     async def send_heartbeats(cls):
-        for client in list(cls.clients):
-            client.ping_client()
-            await asyncio.sleep(0.1)
+        for c in list(cls.clients):
+            c._ping()
+            await asyncio.sleep(0.05)
 
     @classmethod
-    def check_clients(cls):
-        # Consider logging client checks for debugging purposes
+    def reap_stale(cls):
         now = tornado.ioloop.IOLoop.current().time()
+        for c in list(cls.clients):
+            if (now - c.last_pong > 65) or not c.ws_connection or not c.ws_connection.stream.socket:
+                c.close()
 
-        # Identify stale clients
-        stale_clients = set()
-
-        for client in cls.clients:
-            if (now - client.last_pong > 65) or \
-               (not client.ws_connection) or \
-               (not client.ws_connection.stream.socket):
-                stale_clients.add(client)
-
-        # Close stale connections
-        for client in stale_clients:
-            client.close()
-
-def send_heartbeats_callback():
-    tornado.ioloop.IOLoop.current().add_callback(WebSocketHandler.send_heartbeats)
-
-
-class HealthCheckHandler(tornado.web.RequestHandler):
+# ───────────────────────── Tornado app ─────────────────────
+class Health(tornado.web.RequestHandler):
     def get(self):
         self.write("OK")
 
-
 async def main():
     global shared_redis
-    shared_redis = await aioredis.from_url(REDIS_URL, db=DB)  # Create shared Redis connection
+    shared_redis = await new_redis()
 
     app = tornado.web.Application([
-        (r"/health", HealthCheckHandler),
+        (r"/health", Health),
         (r"/(.*)", WebSocketHandler),
     ])
     app.listen(9002)
-    tornado.ioloop.PeriodicCallback(send_heartbeats_callback, HEARTBEAT_INTERVAL).start()
-    tornado.ioloop.PeriodicCallback(WebSocketHandler.check_clients, CLIENT_CHECK_INTERVAL).start()
 
-    # Ensure Redis connection is closed properly when the application shuts down
-    tornado.ioloop.IOLoop.current().add_callback(lambda: shared_redis.close())
+    pc = tornado.ioloop.PeriodicCallback
+    pc(lambda: tornado.ioloop.IOLoop.current().spawn_callback(WebSocketHandler.send_heartbeats),
+       HEARTBEAT_INTERVAL_MS).start()
+    pc(WebSocketHandler.reap_stale, CLIENT_CHECK_INTERVAL_MS).start()
+
+    # close pool cleanly at shutdown
+    async def _close_pool():
+        await shared_redis.aclose()
+    tornado.ioloop.IOLoop.current().add_callback(_close_pool)
+
+    await asyncio.Event().wait()  # keep running
 
 if __name__ == "__main__":
-    asyncio.get_event_loop().run_until_complete(main())
-    asyncio.get_event_loop().run_forever()
-
+    tornado.ioloop.IOLoop.current().run_sync(main)
